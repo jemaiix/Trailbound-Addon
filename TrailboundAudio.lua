@@ -1,6 +1,6 @@
 -- Follow the operating system's default playback endpoint through WoW's
 -- device-change event. No polling, microphone changes, or native UI hooks.
-ForeverAssistAudio={Version='1.8.46'}
+ForeverAssistAudio={Version='1.8.54'}
 local A=ForeverAssistAudio
 local getSettings,pendingAt,lastRestart,applying,active
 local frame=CreateFrame('Frame')

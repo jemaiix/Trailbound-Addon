@@ -1,5 +1,5 @@
 -- Gathering, account inventory, separated training, professions and camera.
-ForeverAssistSystems = {Version="1.8.46"}
+ForeverAssistSystems = {Version="1.8.54"}
 local S = ForeverAssistSystems
 local account, character, getSettings, currentKey
 local moneyReadyAt=0
@@ -253,6 +253,7 @@ function S.RecordMoney(force)
     if money==0 and saved>0 and (GetTime()<moneyReadyAt or not force) then return end
     local changed=saved~=money or not ledger
     record.name,record.realm=name,GetRealmName and GetRealmName() or 'Realm'
+    record.mailName=ForeverAssistFullMailName('player') or record.mailName
     record.money=money;record.moneyUpdatedAt=changed and time() or ledger.updatedAt
     account.characters[key]=record
     ledger=ledger or {};ledger.money,ledger.name,ledger.realm,ledger.updatedAt=money,record.name,record.realm,record.moneyUpdatedAt
@@ -279,6 +280,7 @@ function S.Snapshot()
     -- Build fresh containers without copying the old bags that are about to be replaced.
     for k,v in pairs(old) do if k~="bags" and k~="bagSizes" and k~="bagNames" and k~="items" then record[k]=v end end
     record.name,record.realm=name,realm
+    record.mailName=ForeverAssistFullMailName('player') or record.mailName
     record.money=S.CharacterGold(currentKey,old)
     record.bags={};record.bagSizes={};record.bagNames={}
     local slots=C_Container and C_Container.GetContainerNumSlots or GetContainerNumSlots
@@ -590,7 +592,7 @@ function S.RecordRecipes()
         if ok and recipes then
             for _,recipe in ipairs(recipes) do
                 local got,info=pcall(C_TradeSkillUI.GetRecipeInfo,recipe)
-                if got and info then character.knownRecipes[recipe]=info.learned==true end
+                if got and info and info.learned==true then character.knownRecipes[recipe]=true end
             end
         end
     end
@@ -599,9 +601,12 @@ function S.ProfessionList(id)
     local learned=S.LearnedProfessions()
     if not learned[id] then return {} end
     local reference=ForeverAssistProfessionData and ForeverAssistProfessionData[id]
-    local entries={}
+    local entries,seen={},{}
     if reference then
         for _,spell in ipairs(reference.records) do
+            -- Reference-backed scans must not fall through as ID-less extras
+            -- after their learned reference entry has been filtered out.
+            seen[spell.name..'|'..spell.rank]=true
             local confirmed=character.professionTraining[id] and character.professionTraining[id][spell.name.."|"..spell.rank]
             if confirmed and not character.knownRecipes[spell.spellID] and not Known(spell.spellID) then
                 local copy=ForeverAssistExtras.Copy(spell)
@@ -611,8 +616,6 @@ function S.ProfessionList(id)
             end
         end
     end
-    local seen={}
-    for _,spell in ipairs(entries) do seen[spell.name.."|"..spell.rank]=true end
     for key,spell in pairs(character.professionTraining[id] or {}) do
         if not seen[key] and not (spell.spellID and (Known(spell.spellID) or character.knownRecipes[spell.spellID])) then local copy=ForeverAssistExtras.Copy(spell);copy.scanned=true;entries[#entries+1]=copy end
     end
@@ -629,11 +632,11 @@ function S.RefreshProfessions()
     for i,spell in ipairs(list) do
         local row=professionRows[i]
         if not row then
-            row=CreateFrame("Button",nil,professionContent);row:SetSize(300,28);row:SetPoint("TOPLEFT",0,-(i-1)*29)
+            row=CreateFrame("Button",nil,professionContent);row:SetSize(285,28);row:SetPoint("TOPLEFT",0,-(i-1)*29)
             row.text=row:CreateFontString(nil,"OVERLAY","TrailboundSmall");row.icon=row:CreateTexture(nil,"ARTWORK");row.icon:SetSize(22,22);row.icon:SetPoint("LEFT",0,0)
-            row.text:SetPoint('TOPLEFT',30,-1);row.text:SetWidth(264);row.text:SetJustifyH('LEFT');row.text:SetMaxLines(1);row.text:SetWordWrap(false)
-            row.requirement=row:CreateFontString(nil,'OVERLAY','TrailboundSmall');row.requirement:SetPoint('BOTTOMLEFT',30,1);row.requirement:SetWidth(158);row.requirement:SetJustifyH('LEFT');row.requirement:SetMaxLines(1)
-            row.cost=row:CreateFontString(nil,'OVERLAY','TrailboundSmall');row.cost:SetPoint('BOTTOMRIGHT',0,1);row.cost:SetWidth(100);row.cost:SetJustifyH('RIGHT')
+            row.text:SetPoint('TOPLEFT',30,-1);row.text:SetWidth(255);row.text:SetJustifyH('LEFT');row.text:SetMaxLines(1);row.text:SetWordWrap(false)
+            row.requirement=row:CreateFontString(nil,'OVERLAY','TrailboundSmall');row.requirement:SetPoint('BOTTOMLEFT',30,1);row.requirement:SetWidth(138);row.requirement:SetJustifyH('LEFT');row.requirement:SetMaxLines(1)
+            row.cost=row:CreateFontString(nil,'OVERLAY','TrailboundSmall');row.cost:SetPoint('BOTTOMRIGHT',-8,1);row.cost:SetWidth(104);row.cost:SetJustifyH('RIGHT');row.cost:SetWordWrap(false)
             row:SetScript("OnEnter",function(self)GameTooltip:SetOwner(self,"ANCHOR_RIGHT");if self.spell.spellID then GameTooltip:SetSpellByID(self.spell.spellID) else GameTooltip:AddLine(self.spell.name) end;GameTooltip:AddLine(self.requirement:GetText());if not self.spell.requiredSkill then GameTooltip:AddLine('Visit the trainer to record the skill requirement.',1,.82,.48,true)end;GameTooltip:Show() end)
             row:SetScript("OnLeave",function()GameTooltip:Hide() end);professionRows[i]=row
         end
@@ -657,7 +660,7 @@ function S.CreateProfessionPanel(host)
     if host then professionWindow:ClearAllPoints();professionWindow:SetPoint("TOPLEFT",host,"TOPRIGHT",65,-5) end
     professionRows,professionButtons={},{}
     professionHeader=professionWindow:CreateFontString(nil,"OVERLAY","TrailboundSmall");professionHeader:SetPoint("TOPLEFT",18,-45);professionHeader:SetWidth(305);professionHeader:SetJustifyH("LEFT")
-    professionContent=Scroll(professionWindow,18,-67,-32,30,300)
+    professionContent=Scroll(professionWindow,18,-67,-32,30,285)
     local note=professionWindow:CreateFontString(nil,"OVERLAY","TrailboundMuted");note:SetPoint("BOTTOM",0,14);note:SetText("Confirmed trainer services")
     professionWindow:SetScript("OnShow",S.RefreshProfessions)
 end
@@ -710,8 +713,14 @@ function S.Camera(value,report)
 end
 local bagsDirty=false
 local f=CreateFrame("Frame")
+local recipeRefreshPending=false
+local function RefreshRecipesSoon()
+    if recipeRefreshPending or not C_Timer or not C_Timer.After then return end
+    recipeRefreshPending=true
+    C_Timer.After(.2,function()recipeRefreshPending=false;if account then S.RecordRecipes();S.RefreshProfessions()end end)
+end
 for _,event in ipairs({"PLAYER_LOGIN","PLAYER_ENTERING_WORLD","PLAYER_LEAVING_WORLD","BAG_UPDATE","BAG_UPDATE_DELAYED","PLAYER_MONEY","PLAYER_LOGOUT","ADDON_LOADED","TRADE_SKILL_SHOW","TRADE_SKILL_LIST_UPDATE","TRADE_SKILL_DATA_SOURCE_CHANGED","NEW_RECIPE_LEARNED","SKILL_LINES_CHANGED"}) do pcall(f.RegisterEvent,f,event) end
-f:SetScript("OnEvent",function(_,event)
+f:SetScript("OnEvent",function(_,event,recipeID,recipeLevel,baseRecipeID)
     if not account then return end
     if event=="PLAYER_LOGOUT" or event=="PLAYER_LEAVING_WORLD" then
         -- Money is already captured on money events. During teardown GetMoney
@@ -726,6 +735,11 @@ f:SetScript("OnEvent",function(_,event)
         S.RecordMoney(event=="PLAYER_MONEY");bagsDirty=not S.Snapshot();S.RefreshInventory()
     elseif event=="ADDON_LOADED" then S.HookWindows()
     else
+        if event=='NEW_RECIPE_LEARNED'then
+            for _,id in pairs({recipeID,baseRecipeID})do
+                if (not issecretvalue or not issecretvalue(id))and type(id)=='number'and id>0 then character.knownRecipes[id]=true end
+            end
+        end
         S.RecordRecipes()
         if event=="TRADE_SKILL_SHOW" then
             S.HookWindows()
@@ -740,6 +754,7 @@ f:SetScript("OnEvent",function(_,event)
             end
         end
         S.RefreshProfessions()
+        RefreshRecipesSoon()
     end
 end)
 SLASH_FOREVERASSISTBAGS1="/tbbags"

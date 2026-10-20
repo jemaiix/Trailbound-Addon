@@ -1,5 +1,5 @@
 -- Live minimap-tooltip observations only; never enumerate hidden world objects.
-ForeverAssistGathering={Version='1.8.46'}
+ForeverAssistGathering={Version='1.8.54'}
 local G=ForeverAssistGathering
 local settings,character,options
 local icons,glows={},{}

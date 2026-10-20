@@ -1,6 +1,6 @@
 -- Original utility UI; no third-party addon code is embedded.
 ForeverAssistPlay = {}
-ForeverAssistPlay.Version='1.8.46'
+ForeverAssistPlay.Version='1.8.54'
 local P=ForeverAssistPlay
 local account,character,settings
 local function say(s) print('|cffd2b077Trailbound:|r '..s) end
@@ -137,9 +137,12 @@ end
 -- Mail addresses are realm scoped. Sending is still a manual Blizzard action.
 local mailPending,mailRows,mailWindow
 function P.MailNames()
- local names={};local realm=GetRealmName();local me=UnitName('player');local seen={}
- for name in pairs(account.mailRecipients[realm] or {}) do if name~=me then seen[name]=true end end
- for _,c in pairs(account.characters or {}) do if c.realm==realm and c.name~=me then seen[c.name]=true end end
+ local names={};local realm=GetRealmName();local me=ForeverAssistFullMailName('player');local seen={}
+ local function add(name)
+  if type(name)=='string' and name:find('%S+%s+%S+') and name~=me then seen[name]=true end
+ end
+ for name in pairs(account.mailRecipients[realm] or {}) do add(name) end
+ for _,c in pairs(account.characters or {}) do if c.realm==realm then add(c.mailName or c.name) end end
  for n in pairs(seen) do names[#names+1]=n end;table.sort(names);return names
 end
 function P.RememberRecipient(name)
@@ -154,12 +157,69 @@ function P.MailMenu()
   local scroll=CreateFrame('ScrollFrame',nil,mailWindow,'UIPanelScrollFrameTemplate');scroll:SetPoint('TOPLEFT',15,-45);scroll:SetPoint('BOTTOMRIGHT',-35,20)
   mailWindow.content=CreateFrame('Frame',nil,scroll);mailWindow.content:SetSize(260,1);scroll:SetScrollChild(mailWindow.content)
  end
+ if not mailWindow.note then local t=text(mailWindow);t:SetPoint('BOTTOM',0,5);t:SetText('Full names only. Log into alts to remember them.');mailWindow.note=t end
  for i,n in ipairs(names) do local name=n;local b=mailRows[i] or button(mailWindow.content,'',0,-(i-1)*27,255,function() end);mailRows[i]=b;b:SetText(name);b:SetScript('OnClick',function() if SendMailNameEditBox then SendMailNameEditBox:SetText(name);SendMailNameEditBox:ClearFocus() end;mailWindow:Hide() end);b:Show() end
  mailWindow.content:SetHeight(math.max(1,#names*27));mailWindow:SetShown(not mailWindow:IsShown())
 end
+local mailButton
 local function hookMail()
- if SendMailFrame and not SendMailFrame.faRecipients then SendMailFrame.faRecipients=button(SendMailFrame,'Recipients',180,-38,100,P.MailMenu) end
+ local send=SendMailFrame
+ if not send then return end
+ local header=MailFrame and MailFrame:IsShown() and MailFrame or send
+ if not mailButton then
+  local b=CreateFrame('Button','ForeverAssistMailRecipientsButton',UIParent,'BackdropTemplate');mailButton=b
+  b:SetSize(90,20);b:SetFrameStrata('DIALOG')
+  b:SetBackdrop({bgFile='Interface/Buttons/WHITE8X8',edgeFile='Interface/Buttons/WHITE8X8',edgeSize=1})
+  b:SetBackdropColor(.14,.09,.045,1);b:SetBackdropBorderColor(.48,.34,.17,1)
+  b.label=text(b);b.label:SetPoint('CENTER');b.label:SetText('Recipients');b.label:SetTextColor(.96,.86,.65)
+  b:SetScript('OnClick',P.MailMenu)
+  b:SetScript('OnEnter',function(self) self:SetBackdropColor(.26,.17,.07,1) end)
+  b:SetScript('OnLeave',function(self) self:SetBackdropColor(.14,.09,.045,1) end)
+ end
+ if not send.tbRecipientsHooked then
+  send.tbRecipientsHooked=true
+  send:HookScript('OnShow',hookMail)
+  send:HookScript('OnHide',function() mailButton:Hide();if mailWindow then mailWindow:Hide() end end)
+ end
+ send.faRecipients=mailButton
+ local level=header:GetFrameLevel()+60
+ for _,frame in ipairs({header,send}) do
+  if frame.faWindowMoveHandle then level=math.max(level,frame.faWindowMoveHandle:GetFrameLevel()+1) end
+ end
+ mailButton:SetFrameLevel(level);mailButton:ClearAllPoints()
+ -- Anchor to the visible outer title strip, left of its centered native title.
+ mailButton:SetPoint('TOPLEFT',header,'TOPLEFT',64,-5)
+ local input=SendMailNameEditBox
+ local visible=input and input.IsVisible and input:IsVisible()
+ if visible==nil then if send.IsVisible then visible=send:IsVisible() else visible=send:IsShown() end end
+ mailButton:SetShown(visible)
 end
+P.UpdateMailButton=hookMail
+function P.MailDebug()
+ hookMail();say('Mail debug '..P.Version)
+ for _,entry in ipairs({{'MailFrame',MailFrame},{'SendMailFrame',SendMailFrame},{'Address field',SendMailNameEditBox},{'Recipients',mailButton}}) do
+  local f=entry[2]
+  if not f then say(entry[1]..': missing') else
+   local parent=f.GetParent and f:GetParent();local p=parent and parent.GetName and parent:GetName() or '?'
+   local visible=f.IsVisible and f:IsVisible() or false
+   local x,y=f:GetCenter();local alpha=f.GetEffectiveAlpha and f:GetEffectiveAlpha() or f:GetAlpha()
+   say(('%s: shown=%s visible=%s parent=%s center=%s,%s alpha=%s level=%s'):format(entry[1],tostring(f:IsShown()),tostring(visible),p,tostring(x),tostring(y),tostring(alpha),tostring(f:GetFrameLevel())))
+  end
+ end
+end
+-- Dedicated mail lifecycle: native frame creation/show ordering must not depend
+-- on earlier unrelated gameplay event handlers finishing successfully.
+local mailEvents=CreateFrame('Frame');mailEvents:Hide()
+mailEvents:RegisterEvent('MAIL_SHOW');mailEvents:RegisterEvent('MAIL_CLOSED')
+mailEvents:SetScript('OnEvent',function(self,event)
+ if event=='MAIL_SHOW' then self:Show();hookMail()
+ else self:Hide();if mailButton then mailButton:Hide() end;if mailWindow then mailWindow:Hide() end end
+end)
+local mailElapsed=0
+mailEvents:SetScript('OnUpdate',function(_,elapsed)
+ mailElapsed=mailElapsed+elapsed
+ if mailElapsed>=.1 then mailElapsed=0;hookMail() end
+end)
 -- Completed quest rewards: query by quest ID without changing the selected quest.
 function P.QuestXP()
  local rows,total,unknown={},0,0
@@ -494,7 +554,7 @@ local function hookTrainer()
  local trainer=ClassTrainerFrame or TrainerFrame
  if trainer and not trainButton then trainButton=button(trainer,'Train all',15,-35,100,P.TrainAll) end
 end
--- Bag movement uses a dedicated handle; item dragging retains its normal behavior.
+-- Only the title strip receives drag input; item and utility buttons stay native.
 local bagFrameNames={'ContainerFrameCombinedBags','ContainerFrame1','ContainerFrame2','ContainerFrame3','ContainerFrame4','ContainerFrame5','ContainerFrame6'}
 function P.ApplyBagPositions()
  if combat() or not settings().moveBags then return end
@@ -513,11 +573,18 @@ function P.ResetBags()
  if UpdateContainerFrameAnchors then UpdateContainerFrameAnchors() end
 end
 local function hookBags()
+ if combat() then return end
+ P.HookCombinedReagents()
+ local combined=ContainerFrameCombinedBags
+ if combined and combined.tbReagentsPending and ContainerFrame_GenerateFrame then
+  combined.tbReagentsPending=nil
+  if combined:IsShown() then ContainerFrame_GenerateFrame(combined,0,0) end
+ end
  for _,name in ipairs(bagFrameNames) do
   local f=_G[name]
   if f and not f.faMoveHandle then
-   local h=CreateFrame('Button',nil,UIParent);f.faMoveHandle=h;h:SetSize(140,20);h:SetPoint('BOTTOM',f,'TOP',0,2);h:SetFrameStrata('HIGH');h:SetFrameLevel(f:GetFrameLevel()+10);h:EnableMouse(true)
-   local t=text(h);t:SetPoint('CENTER');t:SetText('Drag bag');h:RegisterForDrag('LeftButton')
+   local h=CreateFrame('Button',nil,f);f.faMoveHandle=h;h:SetPoint('TOPLEFT',f,'TOPLEFT',48,-4);h:SetPoint('TOPRIGHT',f,'TOPRIGHT',-32,-4);h:SetHeight(23);h:SetFrameLevel(f:GetFrameLevel()+2);h:EnableMouse(true)
+   h:RegisterForDrag('LeftButton')
    h:SetScript('OnDragStart',function() if settings().moveBags and not combat() then f.faDragging=true;f:SetMovable(true);f:SetClampedToScreen(true);if f.SetUserPlaced then f:SetUserPlaced(true) end;f:StartMoving() end end)
    h:SetScript('OnDragStop',function()
     f:StopMovingOrSizing();f.faDragging=false;local x,y=f:GetCenter();local ux,uy=UIParent:GetCenter();settings().bagPositions=settings().bagPositions or {}
@@ -530,6 +597,56 @@ local function hookBags()
   if f and f.faMoveHandle then f.faMoveHandle:SetShown(settings().moveBags and f:IsShown()) end
  end
  P.ApplyBagPositions()
+end
+-- Extend the native pool rather than manufacture replacement item actions.
+function P.HookCombinedReagents()
+ local f=ContainerFrameCombinedBags;local manager=ContainerFrameSettingsManager
+ if combat() or not f or not manager or f.tbReagentsHooked then return end
+ if type(f.AcquireNewItemButton)~='function' or type(f.UpdateItemSlots)~='function' or type(manager.IsUsingCombinedBags)~='function' then return end
+ f.tbReagentsHooked=true
+ local reagent=Enum and Enum.BagIndex and Enum.BagIndex.ReagentBag or 5
+ local nativeCombined=manager.IsUsingCombinedBags
+ manager.IsUsingCombinedBags=function(self,id)
+  if id==reagent then return nativeCombined(self) end
+  return nativeCombined(self,id)
+ end
+ local matches=f.MatchesBagID
+ if matches then f.MatchesBagID=function(self,id) if id==reagent then return manager:IsUsingCombinedBags() end;return matches(self,id) end end
+ local isOpen=f.IsBagOpen
+ if isOpen then f.IsBagOpen=function(self,id) if id==reagent and manager:IsUsingCombinedBags() and self:IsShown() then return id end;return isOpen(self,id) end end
+ hooksecurefunc(f,'SetBagSize',function(self)
+  if not combat() and manager:IsUsingCombinedBags() then
+   local total=0
+   for bag=0,reagent do total=total+(ContainerFrame_GetContainerNumSlots and ContainerFrame_GetContainerNumSlots(bag) or C_Container.GetContainerNumSlots(bag)) end
+   self.size=total
+  end
+ end)
+ hooksecurefunc(f,'UpdateItemSlots',function(self)
+  if combat() then self.tbReagentsPending=true;return end
+  if not manager:IsUsingCombinedBags() then return end
+  local found={}
+  for _,item in ipairs(self.Items or {}) do if item:GetBagID()==reagent then found[item:GetID()]=true end end
+  for slot=1,C_Container.GetContainerNumSlots(reagent) do
+   if not found[slot] then self:AcquireNewItemButton():Initialize(reagent,slot) end
+  end
+ end)
+ local function tint(self)
+  for _,item in ipairs(self.Items or {}) do
+   local empty=manager:IsUsingCombinedBags() and item:GetBagID()==reagent and not C_Container.GetContainerItemInfo(reagent,item:GetID())
+   if empty and not item.tbReagentEmpty and not combat() then
+    local t=item:CreateTexture(nil,'BACKGROUND',nil,1);t:SetAllPoints(item);t:SetColorTexture(.18,.52,.45,.55);item.tbReagentEmpty=t
+   end
+   if item.tbReagentEmpty then item.tbReagentEmpty:SetShown(empty) end
+  end
+ end
+ if type(f.UpdateItems)=='function' then hooksecurefunc(f,'UpdateItems',tint) end
+ hooksecurefunc(f,'UpdateItemSlots',tint)
+ f:HookScript('OnShow',function() if not combat() then tint(f) end end)
+ if manager.MarkBagSetupDirty then manager:MarkBagSetupDirty() end
+ -- Reopen through native routing once, to clear a separately open reagent bag.
+ local separate=ContainerFrame6
+ if manager:IsUsingCombinedBags() and separate and separate:IsShown() and separate.GetID and separate:GetID()==reagent then separate:Hide() end
+ if f:IsShown() and ContainerFrame_GenerateFrame then ContainerFrame_GenerateFrame(f,0,0) end
 end
 -- Camp IDs are Forever spell records, not assumed buff names or fixed durations.
 local campWarned,nearbyWas,tentWas={},false,false
@@ -1112,7 +1229,7 @@ function P.Options(category)
    local note=text(page);note:SetPoint('TOPLEFT',20,-185);note:SetWidth(400);note:SetText('Unlock to show a draggable preview without eating or bandaging. Closing this editor locks the timer. Its position is saved in your profile.')
    page:SetScript('OnHide',function() P.nutritionUnlocked=false;unlock:SetText('Unlock and preview timer');P.UpdateNutrition() end)
   elseif category=='camp' then check('campNotices','Camp notices, Sit button and welcome timer',-48)
-  elseif category=='bags' then check('moveBags','Enable movable bag handles',-48);button(page,'Reset bag positions',20,-100,400,function() P.ResetBags();say('Bag positions reset.') end)
+  elseif category=='bags' then check('moveBags','Drag bag headers to move',-48);button(page,'Reset bag positions',20,-100,400,function() P.ResetBags();say('Bag positions reset.') end)
   elseif category=='minimap' then check('minimapMenu','Show addon icons on minimap right-click',-48);check('squareMinimap','Use a square minimap',-88)
   elseif category=='loot' then check('fastLoot','Faster auto looting and instant window close',-48) end
   button(page,'Back to settings',20,-260,400,function() page:Hide();if ForeverAssistOptions then ForeverAssistOptions:Show() end end)
@@ -1142,7 +1259,12 @@ character.keptJunk=character.keptJunk or {};account.mailRecipients=account.mailR
  for _,key in ipairs({'quietErrors','xpDetails','swingTimer','campNotices','moveBags','minimapMenu','fastLoot','squareMinimap','nutritionTimers'}) do if settings()[key]==nil then settings()[key]=true end end
  for _,event in ipairs({'LOOT_READY','LOOT_OPENED','LOOT_SLOT_CLEARED','LOOT_CLOSED','PLAYER_LOGIN','ADDON_LOADED','PLAYER_XP_UPDATE','CHAT_MSG_COMBAT_XP_GAIN','QUEST_LOG_UPDATE','QUEST_DATA_LOAD_RESULT','UPDATE_EXHAUSTION','TIME_PLAYED_MSG','UNIT_AURA','UNIT_SPELLCAST_CHANNEL_START','UNIT_SPELLCAST_CHANNEL_UPDATE','UNIT_SPELLCAST_CHANNEL_STOP','PLAYER_SWING','UNIT_SPELLCAST_SUCCEEDED','UNIT_SPELLCAST_FAILED','UNIT_SPELLCAST_INTERRUPTED','MERCHANT_SHOW','MERCHANT_UPDATE','MERCHANT_CLOSED','MAIL_SHOW','MAIL_SEND_SUCCESS','MAIL_FAILED','MAIL_CLOSED','TRAINER_SHOW','TRAINER_CLOSED','BAG_UPDATE_DELAYED','SPELLS_CHANGED','PLAYER_REGEN_ENABLED'}) do pcall(events.RegisterEvent,events,event) end
  if BuybackItem then hooksecurefunc('BuybackItem',P.BoughtBack) end
- if SendMail then hooksecurefunc('SendMail',function(name) mailPending=name end) end
+ if SendMail then hooksecurefunc('SendMail',function(name)
+  local entered=SendMailNameEditBox and SendMailNameEditBox:GetText()
+  -- Some native paths shorten the send argument; retain the explicit address.
+  if type(entered)=='string' and entered:find('%S+%s+%S+') and type(name)=='string' and (entered==name or entered:match('^(%S+)')==name) then name=entered end
+  mailPending=name
+ end) end
  if C_TradeSkillUI and C_TradeSkillUI.CraftRecipe then hooksecurefunc(C_TradeSkillUI,'CraftRecipe',function(id,count) P.CraftStart(id,count) end) end
  if DoTradeSkill then hooksecurefunc('DoTradeSkill',function(_,count) P.CraftStart(nil,count) end) end
  if UpdateContainerFrameAnchors then hooksecurefunc('UpdateContainerFrameAnchors',P.ApplyBagPositions) end

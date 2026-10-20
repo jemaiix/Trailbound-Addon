@@ -1,3 +1,41 @@
+# Trailbound 1.8.49
+
+Learned profession recipes no longer return through saved trainer rows. Catalogues refresh on learning and reconcile delayed client data automatically.
+
+## Trailbound 1.8.49 - same-session learned catalogue filtering
+
+Fixed profession catalogue fallback reintroducing learned recipes: every reference name/rank is now marked as handled before learned filtering. Previously a learned reference recipe was removed but its saved trainer observation (often without a spellID) was then appended as an unmatched extra. Reference-backed observations can no longer bypass the learned check.
+
+Systems' NEW_RECIPE_LEARNED handler now uses the event recipeID and optional baseRecipeID immediately, including when the crafting window/current profession is unavailable. Recipe scans only add confirmed learned=true values; stale/partial false replies cannot erase a positive learn event. Scans still never infer learning from purchase attempts. Trainer scans capture a readable spell hyperlink ID when exposed. Existing unknown trainer services remain until used/known confirmation.
+
+Class trainer catalogue keeps its existing rank-aware filtering and now listens for LEARNED_SPELL_IN_TAB as well as SPELLS_CHANGED. Trainer updates and class learn events refresh immediately and schedule one coalesced 200ms follow-up to reconcile native trainer/spellbook caches. Follow-up re-scans trainer services only while the trainer is open, records recipes and refreshes both lists. Profession updates similarly schedule a bounded follow-up. No persistent polling or purchase hooks. Confirmed learned-recipe cache remains sticky; profession-unlearning/relearning cache invalidation is not changed by this patch.
+
+Syntax and cumulative regression suite pass. Added same-session ID-less-trainer fallback regression, visible recipe-row removal after learn event, event base-ID capture, stale learned=false protection, class learned-rank filtering with future-rank preservation, and coalesced delayed class refresh tests. Native client event ordering still needs live confirmation. Versioned ZIP and live AddOns/Trailbound files updated/hash-verified; use /rl once. SavedVariables/migration metadata preserved.
+
+Primary API reference checked: Blizzard_APIDocumentationGenerated/TradeSkillUIDocumentation.lua NEW_RECIPE_LEARNED payload (recipeID, recipeLevel, optional baseRecipeID).
+
+# Trailbound 1.8.48
+
+Reload once to fix orphaned crafting-profit settings. Editors now remain inside a permanent options container and all close with the main window.
+
+## Trailbound 1.8.48 - settings editor containment and close lifecycle
+
+User reports Crafting profit estimates controls floating over the world after leaving options, sometimes following settings edits/profession opening. Shared editor host previously replaced the scroll frame's scroll child with each editor and only closed activeEditor. Reworked it to set one permanent editorContent scroll child at construction; every editor is parented inside that container, never directly swapped via SetScrollChild. Opening hides all other registered editors before selecting/parenting/showing the target and sizes the container to its content. Host close clears active tracking, explicitly hides every registered editor and hides the scroll area. Registered editors reject late OnShow events when the host is closed or they are inactive. No native profession/window methods changed.
+
+Syntax and cumulative regression suite pass, with actual profit-settings mutations, repeated profit/chat switches, closing/reopening main options, profit refresh while closed and forced late shows. Checks assert constant scroll-child identity and zero editor swaps, correct parent containment and all-editor cleanup. Tests cannot confirm the exact native client detachment sequence; the new ownership avoids that path. Packaged and installed directly in AddOns/Trailbound with hashes matching source. /rl once loads the fix and clears existing stuck controls. SavedVariables and migration metadata untouched.
+
+# Trailbound 1.8.47
+
+Level-times background is transparent by default. Adjust it under Experience & travel. Catalogue price columns are inset clear of scrollbars.
+
+## Trailbound 1.8.47 - level background opacity and catalogue price clipping
+
+Level-times background defaults to fully transparent. New profile setting levelTimesBackgroundOpacity (0-1, default 0) controls only the backdrop and border alpha; frame/text alpha stays unchanged. Slider under Experience & travel applies live and persists with addon settings. Position/history and text colors are unchanged. Header now explicitly says Made by Jemai.
+
+Profession catalogue scroll viewport was 295 wide but content/rows were 300, clipping the rightmost coin texture. Content/rows are now 285 with an additional 8-unit right inset on the 104-unit price column. Requirement column narrowed to avoid price overlap, and coin text does not wrap. Class catalogue also receives an 8-unit price inset and wider 104-unit price field, with row/content width 284 safely inside its 304-unit viewport. Dense row heights and red skill/level warnings remain.
+
+Syntax and cumulative regression suite pass, including default/custom opacity without fading text and both price-column bounds. Versioned ZIP produced and runtime copied/hash-verified in live AddOns/Trailbound. /rl is sufficient; migration metadata and SavedVariables untouched. In-game rendering at the user's UI scale still needs confirmation.
+
 # Trailbound 1.8.46
 
 Use `/rl` after updating. Visit profession trainers once to record recipe skill requirements. Catalogue rows and profit summaries are compact; Search mats includes per-craft ingredient quantities.

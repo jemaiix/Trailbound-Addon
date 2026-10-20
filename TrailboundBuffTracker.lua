@@ -1,5 +1,5 @@
 -- Short-lived important player auras, including external casters and consumables.
-ForeverAssistBuffTracker={Version="1.8.46"}
+ForeverAssistBuffTracker={Version="1.8.54"}
 local T=ForeverAssistBuffTracker
 function T.Suspend()
  T.suspended=true;T.unlocked=false

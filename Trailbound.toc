@@ -3,7 +3,7 @@
 ## Notes: Quest and vendor helpers, mana timer, class/gathering reminders, short important buff tracking, class/riding/profession catalogues, account bags and gold, junk management (/junk), profiles and camera (/tb).
 ## Author: Jemai
 ## IconTexture: Interface\AddOns\Trailbound\Media\TrailboundMark
-## Version: 1.8.46
+## Version: 1.8.54
 ## OptionalDeps: ForeverAssist, Auctionator, TradeSkillMaster
 ## SavedVariables: ForeverAssistAccountDB, ForeverAssistGoldDB, TrailboundMigrationDB
 ## SavedVariablesPerCharacter: ForeverAssistDB

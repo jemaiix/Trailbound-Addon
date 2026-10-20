@@ -1,4 +1,4 @@
-ForeverAssistFlight={Version='1.8.46'}
+ForeverAssistFlight={Version='1.8.54'}
 local F=ForeverAssistFlight
 local account,character,settings,root,nodes,pending,flight
 local function readable(v)return not issecretvalue or not issecretvalue(v)end

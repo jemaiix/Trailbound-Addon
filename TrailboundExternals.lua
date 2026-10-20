@@ -1,5 +1,5 @@
 -- External notices require readable, timed auras from a confirmed other player.
-ForeverAssistExternals={Version='1.8.46'}
+ForeverAssistExternals={Version='1.8.54'}
 local X=ForeverAssistExternals
 local getSettings,root,options
 local spells={[10060]=true,[29166]=true,[1022]=true,[5599]=true,[10278]=true,[1044]=true,

@@ -83,3 +83,12 @@ function ForeverAssistStyleButton(b)
  b:HookScript('OnEnable',function()label:SetTextColor(.96,.86,.65)end)
  return b
 end
+-- Keep mail addresses separate from display names and stable character keys.
+function ForeverAssistFullMailName(unit)
+ for _,api in ipairs({'UnitNameUnmodified','UnitFullName','UnitName'}) do
+  if type(_G[api])=='function' then
+   local ok,name=pcall(_G[api],unit)
+   if ok and type(name)=='string' and name:find('%S+%s+%S+') then return name:match('^%s*(.-)%s*$') end
+  end
+ end
+end

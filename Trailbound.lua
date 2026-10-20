@@ -1,5 +1,5 @@
 --------------------------------------------------------------------
--- Trailbound 1.8.46
+-- Trailbound 1.8.54
 --  * Auto-opens vendor (and optionally trainer) gossip
 --  * Auto accepts / turns in quests (skips quests with a reward choice)
 --  * Auto-sells gray junk when a vendor window opens
@@ -19,7 +19,7 @@ local defaults = {
     book = true, gathering = true, accountBags = true, professionBook = true,
     cameraMax = true, cameraFactor = 4, cameraRequest = "4",
     sparkle = true,
-    petReminder = true, sleepingBagReminder = true, audioFollowSystem = true, flightTimer = true, levelTimes = true, craftProfit = true,
+    petReminder = true, sleepingBagReminder = true, audioFollowSystem = true, flightTimer = true, levelTimes = true, levelTimesBackgroundOpacity = 0, craftProfit = true,
     buffs = true, buffsHideCombat = false, buffsHideMounted = true,
     buffSize = 48, buffTextSize = 14, buffX = 0, buffY = 150,
 }
@@ -274,6 +274,10 @@ local function ScanTrainer()
                 cost = GetTrainerServiceCost(i) or 0,
                 available = cat == "available",
             }
+            if GetTrainerServiceItemLink then
+                local ok,link=pcall(GetTrainerServiceItemLink,i)
+                if ok and (not issecretvalue or not issecretvalue(link))and type(link)=='string'then record.spellID=tonumber(link:match('spell:(%d+)'))end
+            end
             ForeverAssistSystems.StoreTraining(key, record, i, professionTrainer, cat == "used")
         end
     end
@@ -290,20 +294,21 @@ local function GetRow(i)
     local r = rows[i]
     if not r then
         r = CreateFrame("Frame", nil, content)
-        r:SetSize(290, ROW_H)
+        r:SetSize(284, ROW_H)
         r:SetPoint("TOPLEFT", 0, -(i - 1) * ROW_H)
         r.left = r:CreateFontString(nil, "OVERLAY", "TrailboundHeading")
         r.icon=r:CreateTexture(nil,"ARTWORK");r.icon:SetSize(22,22);r.icon:SetPoint("LEFT",0,0)
         r.left:SetPoint("TOPLEFT", 28, -1)
-        r.left:SetWidth(258)
+        r.left:SetWidth(256)
         r.left:SetJustifyH("LEFT")
         r.left:SetHeight(14)
         r.left:SetMaxLines(1);r.left:SetWordWrap(false)
         r.level = r:CreateFontString(nil,"OVERLAY","TrailboundSmall");r.level:SetPoint("BOTTOMLEFT",28,2)
         r.right = r:CreateFontString(nil, "OVERLAY", "TrailboundSmall")
-        r.right:SetPoint("BOTTOMRIGHT", 0, 2)
+        r.right:SetPoint("BOTTOMRIGHT", -8, 2)
         r.right:SetJustifyH("RIGHT")
-        r.right:SetWidth(75)
+        r.right:SetWidth(104)
+        r.right:SetWordWrap(false)
         r:EnableMouse(true)
         r:SetScript("OnEnter", function(self)
             GameTooltip:SetOwner(self, "ANCHOR_RIGHT")
@@ -395,7 +400,7 @@ local function CreateBook()
     scroll:SetPoint("TOPLEFT", 14, -58)
     scroll:SetPoint("BOTTOMRIGHT", -32, 38)
     content = CreateFrame("Frame", nil, scroll)
-    content:SetSize(290, 1)
+    content:SetSize(284, 1)
     scroll:SetScrollChild(content)
 
     book:SetScript("OnShow", RefreshBook)
@@ -404,6 +409,18 @@ local function CreateBook()
         RefreshBook()
     end)
     book:SetShown(DB.book and bookHost:IsShown())
+end
+
+-- Learn events can precede the final spellbook/trainer cache update.
+local catalogueRefreshPending=false
+local function RefreshCataloguesSoon()
+    if catalogueRefreshPending or not C_Timer or not C_Timer.After then return end
+    catalogueRefreshPending=true
+    C_Timer.After(.2,function()
+        catalogueRefreshPending=false
+        if ClassTrainerFrame and ClassTrainerFrame:IsShown()then ScanTrainer()end
+        ForeverAssistSystems.RecordRecipes();ForeverAssistSystems.RefreshProfessions();RefreshBook()
+    end)
 end
 
 local function SetBookShown()
@@ -699,7 +716,7 @@ local function CreateOptions()
     local brand=opt:CreateTexture(nil,"ARTWORK");brand:SetSize(44,44);brand:SetPoint("TOPLEFT",18,-10)
     brand:SetTexture("Interface/AddOns/Trailbound/Media/TrailboundMark");opt.brandIcon=brand
     local wordmark=label(opt,"Trailbound",74,-14,380,"TrailboundTitle");wordmark:SetFont('Fonts/FRIZQT__.TTF',24,'');wordmark:SetTextColor(.94,.80,.48)
-    label(opt,"Quality-of-life tools for your adventures    •    Jemai    •    v"..ForeverAssistPlay.Version,75,-43,545)
+    label(opt,"Quality-of-life tools    •    Made by Jemai    •    v"..ForeverAssistPlay.Version,75,-43,545)
     local footer=label(opt,"/tb   •   Changes save as you go   •   Drag the header to move",22,0,800);footer:ClearAllPoints();footer:SetPoint("BOTTOMLEFT",22,16);opt.footer=footer
     local close=CreateFrame("Button",nil,opt,"UIPanelCloseButton");close:SetPoint("TOPRIGHT",-5,-5);tinsert(UISpecialFrames,"ForeverAssistOptions")
     local edit=Button(opt,'Edit mode',660,-19,function()ForeverAssistLayout.Set(true)end);edit:SetSize(145,28);opt.editModeButton=edit
@@ -707,10 +724,14 @@ local function CreateOptions()
     local activeEditor
     local editorScroll=CreateFrame("ScrollFrame",nil,opt,"UIPanelScrollFrameTemplate")
     editorScroll:SetPoint("TOPLEFT",opt,"TOPLEFT",210,-74);editorScroll:SetPoint("BOTTOMRIGHT",opt,"BOTTOMRIGHT",-35,42);editorScroll:Hide();opt.editorScroll=editorScroll
+    -- Keep one permanent scroll child. Swapping editor frames through
+    -- SetScrollChild can detach the previous frame from the options hierarchy.
+    local editorContent=CreateFrame('Frame',nil,editorScroll);editorContent:SetSize(610,550);editorScroll:SetScrollChild(editorContent);opt.editorContent=editorContent
     local editors={}
     function ForeverAssistShowEditor(editor)
         if not opt:IsShown() then opt:Show() end
-        if activeEditor and activeEditor~=editor then activeEditor:Hide() end
+        activeEditor=nil
+        for other in pairs(editors)do if other~=editor then other:Hide()end end
         for _,page in pairs(sections) do page:Hide() end
         if not editors[editor] then
             editors[editor]=true;if editor.SetBackdrop then editor:SetBackdrop(nil) end;editor:SetMovable(false);editor:SetClampedToScreen(false)
@@ -724,12 +745,21 @@ local function CreateOptions()
             editor:HookScript("OnHide",function(self)
                 if activeEditor==self then activeEditor=nil;editorScroll:Hide();for name,page in pairs(sections) do page:SetShown(name==selected) end end
             end)
+            editor:HookScript('OnShow',function(self)
+                if not opt:IsShown()or activeEditor~=self then self:Hide()end
+            end)
         end
-        editor:SetParent(editorScroll);editor:ClearAllPoints();editor:SetPoint("TOPLEFT",editorScroll,"TOPLEFT",0,0)
-        editorScroll:SetScrollChild(editor);if editorScroll.SetVerticalScroll then editorScroll:SetVerticalScroll(0) end
-        activeEditor=editor;editorScroll:Show();editor:Show()
+        activeEditor=editor
+        editor:SetParent(editorContent);editor:ClearAllPoints();editor:SetPoint("TOPLEFT",editorContent,"TOPLEFT",0,0)
+        editorContent:SetSize(math.max(1,editor:GetWidth()),math.max(1,editor:GetHeight()))
+        if editorScroll.SetVerticalScroll then editorScroll:SetVerticalScroll(0) end
+        editorScroll:Show();editor:Show()
     end
-    opt:SetScript("OnHide",function() if activeEditor then activeEditor:Hide() end end)
+    opt:SetScript("OnHide",function()
+        activeEditor=nil
+        for editor in pairs(editors)do editor:Hide()end
+        editorScroll:Hide()
+    end)
     local function section(key,name,title,description)
         local f=CreateFrame("Frame",name,opt);f:SetSize(500,465);f:SetPoint("TOPLEFT",216,-83);f:Hide();sections[key]=f
         f.journalTitle=title;label(f,title,0,0,490,"TrailboundTitle");label(f,description,0,-29,490);return f
@@ -757,7 +787,7 @@ local function CreateOptions()
     label(junk,'Hold Shift when opening a vendor to skip automatic selling.',2,-216,470)
     heading(junk,'Account inventory & movement',-260)
     Check(junk,"accountBags","Account bags, saved banks, gold & item counts",0,-289,function() ForeverAssistSystems.HookWindows() end)
-    Check(junk,"moveBags","Enable movable bag handles",0,-322,applyPlay)
+    Check(junk,"moveBags","Drag bag headers to move",0,-322,applyPlay)
     Button(junk,"Browse account bags",0,-369,function() opt:Hide();ForeverAssistSystems.ToggleInventory() end)
     Button(junk,"Reset bag positions",220,-369,function() ForeverAssistPlay.ResetBags() end)
     Check(junk,"fastLoot","Faster auto looting",0,-421,applyPlay)
@@ -778,10 +808,11 @@ local function CreateOptions()
     Check(progress,'xpLocked','Lock experience bar position',0,-136)
     heading(progress,'Level times',-193)
     Check(progress,'levelTimes','Show recorded level times',0,-226,function()ForeverAssistLevels.Apply()end)
-    label(progress,'Only recorded levels appear. Drag the window to move it, or use Edit mode.',2,-268,470)
-    heading(progress,'Flight paths',-331)
-    Check(progress,'flightTimer','Show flight-path timer',0,-364)
-    label(progress,'The first trip records the route duration. Later trips show an estimated countdown.',2,-408,470)
+    Slider(progress,'levelTimesBackgroundOpacity','Level-times background opacity',6,-298,0,1,.05,function()ForeverAssistLevels.Apply()end)
+    label(progress,'0 = transparent background; 1 = opaque. Text stays fully visible. Drag the window to move it, or use Edit mode.',2,-329,470)
+    heading(progress,'Flight paths',-389)
+    Check(progress,'flightTimer','Show flight-path timer',0,-422)
+    label(progress,'The first trip records its duration; later trips show a countdown.',2,-466,470)
     local professions=section('professions','ForeverAssistProfessionOptions','Professions & prices','Profession catalogue, recipe profit, and auction-price sources.')
     heading(professions,'Profession window',-70)
     Check(professions,'professionBook','Show profession catalogue',0,-103,function()ForeverAssistSystems.ProfessionOptionChanged()end)
@@ -986,7 +1017,7 @@ f:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
         ForeverAssistWindows.Initialize(characterDB)
         for _, e in ipairs({ "PLAYER_LOGIN", "PLAYER_LOGOUT", "GOSSIP_SHOW", "QUEST_GREETING", "QUEST_DETAIL",
             "QUEST_PROGRESS", "QUEST_COMPLETE", "UNIT_SPELLCAST_SUCCEEDED", "TRAINER_SHOW",
-            "TRAINER_UPDATE", "PLAYER_LEVEL_UP", "SPELLS_CHANGED", "MERCHANT_SHOW",
+            "TRAINER_UPDATE", "PLAYER_LEVEL_UP", "SPELLS_CHANGED", "LEARNED_SPELL_IN_TAB", "MERCHANT_SHOW",
             "PLAYER_ENTERING_WORLD", "PLAYER_REGEN_ENABLED", "UNIT_AURA", "UNIT_PET", "PLAYER_TALENT_UPDATE", "CHARACTER_POINTS_CHANGED", "ZONE_CHANGED_NEW_AREA" }) do
             pcall(self.RegisterEvent, self, e)
         end
@@ -1034,9 +1065,11 @@ f:SetScript("OnEvent", function(self, event, arg1, arg2, arg3)
         ScanTrainer()
         ForeverAssistSystems.RefreshProfessions()
         RefreshBook()
+        RefreshCataloguesSoon()
     else -- level up / spells changed
         if event == "SPELLS_CHANGED" and DB then BuildBuffGroups() end
         RefreshBook()
+        if event=='SPELLS_CHANGED'or event=='LEARNED_SPELL_IN_TAB'or event=='PLAYER_LEVEL_UP'then RefreshCataloguesSoon()end
     end
 end)
 
@@ -1069,12 +1102,13 @@ SlashCmdList["FOREVERASSIST"] = function(msg)
         ForeverAssistSystems.Camera(value, true)
         return
     end
-    if msg == "version" then Print("Version 1.8.46 | Gameplay "..tostring(ForeverAssistPlay.Version or "old/unversioned").." | Buff rules "..tostring(ForeverAssistBuffRulesVersion or "old/unversioned").." | Bags "..tostring(ForeverAssistSystems.Version or "old/unversioned"))
+    if msg == "version" then Print("Version 1.8.54 | Gameplay "..tostring(ForeverAssistPlay.Version or "old/unversioned").." | Buff rules "..tostring(ForeverAssistBuffRulesVersion or "old/unversioned").." | Bags "..tostring(ForeverAssistSystems.Version or "old/unversioned"))
     elseif msg == "edit" then ForeverAssistLayout.Set(not ForeverAssistLayout.active)
     elseif msg == "gold" then ForeverAssistSystems.GoldReport()
     elseif msg == "audiodebug" then ForeverAssistAudio.Debug()
     elseif msg == "audio" then ForeverAssistAudio.Refresh()
     elseif msg == "xpdebug" then ForeverAssistPlay.XPDebug()
+    elseif msg == "maildebug" then ForeverAssistPlay.MailDebug()
     elseif msg == "bank" then ForeverAssistBank.Toggle()
     elseif msg == 'rings' then ForeverAssistPlay.RingEditor()
     elseif msg == "" or msg == "options" or msg == "config" then ToggleOptions()
