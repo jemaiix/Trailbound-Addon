@@ -1,0 +1,31 @@
+## Interface: 16001
+## Title: Trailbound
+## Notes: Quest and vendor helpers, mana timer, class/gathering reminders, short important buff tracking, class/riding/profession catalogues, account bags and gold, junk management (/junk), profiles and camera (/tb).
+## Author: Jemai
+## IconTexture: Interface\AddOns\Trailbound\Media\TrailboundMark
+## Version: 1.8.46
+## OptionalDeps: ForeverAssist, Auctionator, TradeSkillMaster
+## SavedVariables: ForeverAssistAccountDB, ForeverAssistGoldDB, TrailboundMigrationDB
+## SavedVariablesPerCharacter: ForeverAssistDB
+
+TrailboundMigration.lua
+TrailboundCompat.lua
+TrailboundAudio.lua
+TrailboundWindows.lua
+TrailboundBank.lua
+TrailboundSpells.lua
+TrailboundExtras.lua
+TrailboundProfessions.lua
+TrailboundSystems.lua
+TrailboundBuffData.lua
+TrailboundBuffTracker.lua
+TrailboundPlay.lua
+TrailboundExternals.lua
+TrailboundFlight.lua
+TrailboundChat.lua
+TrailboundEconomy.lua
+TrailboundGathering.lua
+TrailboundLevels.lua
+TrailboundLayout.lua
+TrailboundReminders.lua
+Trailbound.lua
