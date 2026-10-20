@@ -67,7 +67,6 @@ For an existing installation, replace the addon files and use `/rl` or `/reload`
 | `/tb junk` | Junk manager |
 | `/tb profiles` | Addon profiles |
 | `/tb version` | Installed version information |
-| `/tb maildebug` | Mail-window diagnostics |
 
 The `/rl` shortcut reloads the interface when that command has not already been claimed by another addon or the client.
 
@@ -81,6 +80,6 @@ Your settings, character records and remembered prices are saved by WoW under **
 
 ## Beta status and feedback
 
-Trailbound is being developed against the Forever beta. Client updates and other addons can affect individual features. The mail recipient header button is currently being investigated; its latest visibility changes still need in-game confirmation. If it is missing, open Send Mail and include the output of `/tb maildebug` in your report.
+Trailbound is being developed against the Forever beta. Client updates and other addons can affect individual features.
 
 When reporting a problem, include your Trailbound version (`/tb version`), the steps to reproduce it, any Lua error text, and a screenshot when the issue is visual. Mention other addons that modify the same window.
